@@ -10,7 +10,7 @@ interface MainProps {
 }
 
 interface QRData {
-  id: string;  
+  id: string;
   type: string;
   date: string;
   qr: string;
@@ -24,13 +24,12 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
   }
 
   const { currentUser: user, qrData, addQr, deleteQr, logoutUser } = context;
-  
   const [showModal, setShowModal] = useState(false);
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selected, setSelected] = useState<string>("text");
   const [qrContent, setQrContent] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
-  const [viewedQRDetails, setViewedQRDetails] = useState<QRData | null>(null);
+  const [viewedQR, setViewedQR] = useState<QRData | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const navigate = useNavigate();
@@ -45,6 +44,7 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
     setShowModal(false);
     setQrContent("");
     setSelectedType("all");
+    setViewedQR(null);
   };
 
   const handleUploadToCloudinary = async (file: File) => {
@@ -66,7 +66,7 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
   };
 
   const handleGenerateButtonClick = async () => {
-    if (selectedType !== "text" && !qrContent) {
+    if (selected !== "text" && !qrContent) {
       const fileInput = (document.getElementById("mediaFile") as HTMLInputElement)?.files?.[0];
       if (fileInput) {
         const uploadedUrl = await handleUploadToCloudinary(fileInput);
@@ -82,7 +82,7 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
   const generateAndStoreQR = (content: string) => {
     const newQr: QRData = {
       id: Date.now().toString(),
-      type: selectedType,
+      type: selected,
       date: new Date().toISOString().split("T")[0],
       qr: content,
     };
@@ -94,13 +94,41 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
     deleteQr(id);
   };
 
-  const handleViewQRDetails = (qr: QRData) => {
-    setViewedQRDetails(qr);
+  const handleViewQR = (qr: QRData) => {
+    setViewedQR(qr);
+  };
+
+  const handleDownloadQR = (qrId: string) => {
+    const svg = document.getElementById(`qrCode-${qrId}`) as unknown as SVGElement;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+
+    img.onload = function () {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx?.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+
+      const imgURI = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+
+      const downloadLink = document.createElement("a");
+      downloadLink.href = imgURI;
+      downloadLink.download = "qr_code.png";
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    };
+    img.src = url;
   };
 
   const handleTypeChange = (e: ChangeEvent<HTMLSelectElement>) => {
     setSelectedType(e.target.value);
   };
+
   const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
     setSelected(e.target.value);
   };
@@ -116,13 +144,13 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
     return 0;
   };
 
-  const filteredQrData = qrData
-    .filter((qr: QRData) => selectedType === "all" || qr.type === selectedType)
-    .sort(sortByDate);
-
   const toggleViewMode = (mode: "table" | "grid") => {
     setViewMode(mode);
   };
+
+  const filteredQrData = qrData
+    .filter((qr: QRData) => selectedType === "all" || qr.type === selectedType)
+    .sort(sortByDate);
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-white dark:bg-gray-900 text-black dark:text-white">
@@ -183,17 +211,13 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
         <div>
           <label className="mr-2">View Mode:</label>
           <button
-            className={`mr-2 px-4 py-2 ${
-              viewMode === "table" ? "bg-blue-600" : "bg-gray-500"
-            } text-white rounded-md`}
+            className={`mr-2 px-4 py-2 ${viewMode === "table" ? "bg-blue-600" : "bg-gray-500"} text-white rounded-md`}
             onClick={() => toggleViewMode("table")}
           >
             Table
           </button>
           <button
-            className={`px-4 py-2 ${
-              viewMode === "grid" ? "bg-blue-600" : "bg-gray-500"
-            } text-white rounded-md`}
+            className={`px-4 py-2 ${viewMode === "grid" ? "bg-blue-600" : "bg-gray-500"} text-white rounded-md`}
             onClick={() => toggleViewMode("grid")}
           >
             Grid
@@ -221,10 +245,10 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
               <div>{item.date}</div>
               <div>
                 <button
-                  onClick={() => handleViewQRDetails(item)}
+                  onClick={() => handleViewQR(item)}
                   className="text-blue-500 hover:underline"
                 >
-                  View QR
+                  View
                 </button>
               </div>
               <div>
@@ -239,34 +263,25 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
           ))}
 
           {filteredQrData.length === 0 && (
-            <div className="text-center mt-6 text-gray-600 dark:text-gray-400">
-              No QR codes found for the selected type.
-            </div>
+            <div className="text-center mt-6 text-gray-600 dark:text-gray-400">No QR codes found for the selected type.</div>
           )}
         </div>
       ) : (
         <div className="w-full max-w-5xl mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {filteredQrData.map((item, index) => (
-            <div
-              key={item.id}
-              className="bg-gray-200 dark:bg-gray-800 p-4 rounded-lg shadow-md"
-            >
+          {filteredQrData.map((item) => (
+            <div key={item.id} className="bg-gray-200 dark:bg-gray-800 p-4 rounded-lg shadow-md">
               <div className="flex justify-center">
                 <QRCodeSVG
                   id={`qrCode-${item.id}`}
                   value={item.qr}
                   size={150}
-                  onClick={() => handleViewQRDetails(item)}
+                  onClick={() => handleViewQR(item)}
                   className="cursor-pointer"
                 />
               </div>
               <div className="mt-4 text-center">
-                <p className="text-gray-700 dark:text-gray-300">
-                  Type: {item.type}
-                </p>
-                <p className="text-gray-700 dark:text-gray-300">
-                  Date: {item.date}
-                </p>
+                <p className="text-gray-700 dark:text-gray-300">Type: {item.type}</p>
+                <p className="text-gray-700 dark:text-gray-300">Date: {item.date}</p>
                 <button
                   onClick={() => handleDelete(item.id)}
                   className="text-red-500 hover:underline mt-2"
@@ -278,40 +293,48 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
           ))}
 
           {filteredQrData.length === 0 && (
-            <div className="text-center mt-6 text-gray-600 dark:text-gray-400">
-              No QR codes found for the selected type.
-            </div>
+            <div className="text-center mt-6 text-gray-600 dark:text-gray-400">No QR codes found for the selected type.</div>
           )}
         </div>
       )}
 
-      {viewedQRDetails && (
+      {viewedQR && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center">
-          <div className="bg-gray-800 text-white p-8 rounded-lg shadow-lg relative">
-            <h2 className="text-2xl mb-4">QR Code Details</h2>
-            <div className="mt-4">
-              {viewedQRDetails.type === "text" && (
-                <p className="text-center">
-                  Text Content: {viewedQRDetails.qr}
+          <div className="bg-gray-200 dark:bg-gray-800 text-black dark:text-white p-8 rounded-lg shadow-lg relative">
+            <h2 className="text-2xl mb-4">{viewMode === "grid" ? "QR Code Content" : "QR Code"}</h2>
+
+            {viewMode === "table" ? (
+              <QRCodeSVG id={`qrCode-${viewedQR.id}`} value={viewedQR.qr} size={256} />
+            ) : (
+              <div className="mt-4">
+                <p>
+                  <strong>Type:</strong> {viewedQR.type}
                 </p>
-              )}
-              {viewedQRDetails.type === "image" && (
-                <img
-                  src={viewedQRDetails.qr}
-                  alt="QR Code Content"
-                  className="mx-auto"
-                />
-              )}
-              {viewedQRDetails.type === "video" && (
-                <video controls className="mx-auto">
-                  <source src={viewedQRDetails.qr} type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
-              )}
-            </div>
+                <p>
+                  <strong>Date:</strong> {viewedQR.date}
+                </p>
+                {viewedQR.type === "text" && <p><strong>Text Content:</strong> {viewedQR.qr}</p>}
+                {viewedQR.type === "image" && <img src={viewedQR.qr} alt="QR Code Content" className="mx-auto" />}
+                {viewedQR.type === "video" && (
+                  <video controls className="mx-auto">
+                    <source src={viewedQR.qr} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                )}
+              </div>
+            )}
+
             <div className="mt-4 flex justify-between">
+              {viewMode === "table" && (
+                <button
+                  onClick={() => handleDownloadQR(viewedQR.id)}
+                  className="px-4 py-2 bg-green-600 rounded-md hover:bg-green-700"
+                >
+                  Download QR
+                </button>
+              )}
               <button
-                onClick={() => setViewedQRDetails(null)}
+                onClick={handleCloseModal}
                 className="px-4 py-2 bg-red-600 rounded-md hover:bg-red-700"
               >
                 Close
@@ -323,20 +346,18 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
 
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center">
-          <div className="bg-gray-800 text-white p-8 rounded-lg shadow-lg relative">
+          <div className="bg-gray-200 dark:bg-gray-800 text-black dark:text-white p-8 rounded-lg shadow-lg relative">
             <h2 className="text-2xl mb-4">Generate QR Code</h2>
+
             <div className="mb-4">
               <label className="block mb-2">Choose QR type:</label>
-              <select
-                className="text-gray-900 px-3 py-2 rounded-md w-full"
-                value={selected}
-                onChange={handleChange}
-              >
+              <select className="text-gray-900 px-3 py-2 rounded-md w-full" value={selected} onChange={handleChange}>
                 <option value="text">Text</option>
                 <option value="image">Image</option>
                 <option value="video">Video</option>
               </select>
             </div>
+
             {selected === "text" ? (
               <input
                 type="text"
@@ -346,27 +367,17 @@ const Main: React.FC<MainProps> = ({ toggleTheme }) => {
                 onChange={(e) => setQrContent(e.target.value)}
               />
             ) : (
-              <input
-                id="mediaFile"
-                type="file"
-                accept={selected === "image" ? "image/*" : "video/*"}
-                className="mb-4"
-              />
+              <input id="mediaFile" type="file" accept={selected === "image" ? "image/*" : "video/*"} className="mb-4" />
             )}
-            {loading && (
-              <p className="text-center text-yellow-500">Uploading media...</p>
-            )}
+
+            {loading && <p className="text-center text-yellow-500">Uploading media...</p>}
+
             <div className="flex justify-between">
-              <button
-                onClick={handleGenerateButtonClick}
-                className="px-4 py-2 bg-blue-600 rounded-md hover:bg-blue-700"
-              >
+              <button onClick={handleGenerateButtonClick} className="px-4 py-2 bg-blue-600 rounded-md hover:bg-blue-700">
                 Generate QR
               </button>
-              <button
-                onClick={handleCloseModal}
-                className="px-4 py-2 bg-red-600 rounded-md hover:bg-red-700"
-              >
+
+              <button onClick={handleCloseModal} className="px-4 py-2 bg-red-600 rounded-md hover:bg-red-700">
                 Close
               </button>
             </div>
